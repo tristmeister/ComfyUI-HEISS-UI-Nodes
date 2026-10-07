@@ -1,0 +1,16 @@
+[project]
+name = "comfyui-heiss-ui-nodes"
+version = "0.1.0"
+description = "Custom nodes for HEISS UI. HEISS Rapid: about 1.4x to 2x faster pictures at the same VRAM, by starting at half size (SPEED)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["comfyui", "custom-nodes", "heiss", "speed", "sampling", "spectral", "progressive", "faster"]
+
+[project.urls]
+Repository = "https://github.com/tristmeister/ComfyUI-HEISS-UI-Nodes"
+
+[tool.comfy]
+PublisherId = "tristmeister"
+DisplayName = "HEISS UI Nodes"
+Icon = ""
