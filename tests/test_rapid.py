@@ -335,3 +335,78 @@ class StepsAside(Quiet):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Review(Quiet):
+    """Cases a review turned up (2026-10-08)."""
+
+    def test_shape_keyed_caches_start_afresh_at_the_grow(self):
+        """Qwen-Image 2.1 keeps a prefix cache keyed by the latent size; ComfyUI's slot lookup fails once it holds two."""
+        model = Oracle("flow")
+        shapes = []
+
+        class Diffusion:
+            prefix_cache_enabled = True
+
+            def reset_prefix_cache(self, enabled):
+                shapes.append("reset")
+
+        sampling = model.inner_model.model_patcher.get_model_object("model_sampling")
+        model.inner_model.model_patcher = SimpleNamespace(get_model_object=lambda name: sampling, model=SimpleNamespace(diffusion_model=Diffusion()))
+        sample(model, flow_sigmas(10), wrapped(0.7))
+        self.assertTrue(self.reports[-1]["active"])
+        self.assertEqual(shapes, ["reset"])
+
+    def test_full_size_conditioning_steps_aside(self):
+        for cond, why in (({"model_conds": {"c_concat": object()}}, "full-size image"), ({"mask": torch.ones(1, 32, 32)}, "masked")):
+            with self.subTest(why):
+                model = Oracle("flow")
+                model.inner_model.conds = {"positive": [cond]}
+                x = torch.randn(2, 1, H, W)
+                model.latent_image = torch.zeros_like(x)
+                s = wrapped(0.7)
+                s.sampler_function(model, x, flow_sigmas(10), extra_args={}, disable=True, **s.extra_options)
+                self.assertFalse(self.reports[-1]["active"])
+                self.assertIn(why, self.reports[-1]["reason"])
+                self.assertEqual(set(model.sizes), {(H, W)})
+
+    def plain_model(self, x):
+        """A stand-in that only records the shapes it is asked about."""
+        calls = []
+        sampling = Oracle("flow").inner_model
+
+        class Model:
+            inner_model = sampling
+            latent_image = torch.zeros_like(x)
+
+            def __call__(self, xx, sigma, **kw):
+                calls.append(tuple(xx.shape))
+                return xx * 0
+
+        return Model(), calls
+
+    def test_audio_latents_step_aside(self):
+        x = torch.randn(1, 8, 512)
+        model, calls = self.plain_model(x)
+        s = wrapped(0.7)
+        s.sampler_function(model, x, flow_sigmas(6), extra_args={}, disable=True, **s.extra_options)
+        self.assertFalse(self.reports[-1]["active"])
+        self.assertEqual(set(calls), {(1, 8, 512)})
+
+    def test_few_step_runs_skip_the_smoothing_step(self):
+        model = Oracle("flow")
+        seen = []
+        s = wrapped(0.7)
+        x = torch.randn(2, 1, H, W)
+        model.latent_image = torch.zeros_like(x)
+        s.sampler_function(model, x, flow_sigmas(4), extra_args={}, callback=lambda d: seen.append(d["i"]), disable=True, **s.extra_options)
+        self.assertEqual(self.reports[-1]["extra_steps"], 0)
+        self.assertEqual(len(seen), 4)
+
+    def test_tiny_latents_step_aside(self):
+        x = torch.randn(1, 1, 6, 64)
+        model, calls = self.plain_model(x)
+        s = wrapped(0.7)
+        s.sampler_function(model, x, flow_sigmas(10), extra_args={}, disable=True, **s.extra_options)
+        self.assertFalse(self.reports[-1]["active"])
+        self.assertEqual(set(calls), {(1, 1, 6, 64)})

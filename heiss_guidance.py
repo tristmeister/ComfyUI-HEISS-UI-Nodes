@@ -26,8 +26,11 @@ class GuiderLateCFG(comfy.samplers.CFGGuider):
     def _noise_level(self, timestep):
         if self._kind is None:
             kind, _ = model_kind(self)
-            self._kind = kind or "flow"
-        return flow_t(float(timestep.reshape(-1)[0]), self._kind)
+            self._kind = kind or ""
+        sigma = float(timestep.reshape(-1)[0])
+        # An unknown kind: a sigma above 1 can only be an SD-style one.
+        kind = self._kind or ("sigma" if sigma > 1.0 else "flow")
+        return flow_t(sigma, kind)
 
     def predict_noise(self, x, timestep, model_options={}, seed=None):
         cfg = self.cfg if self._noise_level(timestep) >= self.cfg_until else 1.0

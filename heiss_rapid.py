@@ -34,6 +34,7 @@ from comfy.samplers import KSAMPLER
 
 MIN_START = 0.9  # a run that starts below this (on the flow scale) is image to image / upscale: its layout is given
 MAX_SMALL_SHARE = 0.8  # never more than this share of the steps small, whatever the switch point says
+SMOOTH_FROM_STEPS = 8  # below this the smoothing step costs more than the start saves (a 4-step run would be slower)
 
 _DCT = {}
 
@@ -153,15 +154,49 @@ def shrink_start(model, x, s0, h, w, kind, noise_scale):
 
 
 def report(data):
-    """Tells HEISS (and anything else on ComfyUI's socket) what Rapid did with this run."""
+    """Tells the client that queued this run (HEISS) what Rapid did with it. A prompt queued without a client
+    gets the console line only, never a broadcast to everyone connected."""
     print(f"[HEISS Rapid] {data.get('message', '')}")
     try:
         from server import PromptServer
 
         server = PromptServer.instance
-        server.send_sync("heiss.rapid", {**data, "prompt_id": getattr(server, "last_prompt_id", None)}, getattr(server, "client_id", None))
+        client = getattr(server, "client_id", None)
+        if client:
+            server.send_sync("heiss.rapid", {**data, "prompt_id": getattr(server, "last_prompt_id", None)}, client)
     except Exception:
         pass
+
+
+def spatial_conds(model):
+    """Why the conditioning can't follow a smaller latent, or None: images concatenated to the latent (inpaint models,
+    image-to-video, Fill, InstructPix2Pix), masked or area conditioning. They are made at full size before sampling."""
+    guider = getattr(model, "inner_model", None)
+    conds = getattr(guider, "conds", None) or {}
+    for items in conds.values():
+        for cond in items or []:
+            if not isinstance(cond, dict):
+                continue
+            if cond.get("mask") is not None or cond.get("area") is not None:
+                return "masked or area conditioning"
+            model_conds = cond.get("model_conds") or {}
+            if any(key in model_conds for key in ("c_concat", "concat_latent_image", "noise_concat", "concat_mask")):
+                return "the model reads a full-size image next to the latent (inpaint, image to video, Fill)"
+    return None
+
+
+def reset_shape_caches(model):
+    """Caches a model keeps for one sampling run, keyed by the latent size: they get a second entry once the picture
+    grows, and ComfyUI's Qwen-Image 2.1 prefix cache can't hold two (its slot lookup compares tensors with ==).
+    Starting it afresh at the grow is what a run at the new size would have."""
+    patcher = _patcher(model)
+    diffusion = getattr(getattr(patcher, "model", None), "diffusion_model", None)
+    reset = getattr(diffusion, "reset_prefix_cache", None)
+    if callable(reset):
+        try:
+            reset(bool(getattr(diffusion, "prefix_cache_enabled", False)))
+        except Exception:
+            pass
 
 
 def after_grow(sigmas, j, t2, kind, smooth):
@@ -191,8 +226,13 @@ def sample_rapid(model, x, sigmas, extra_args=None, callback=None, disable=None,
         return run(x, sigmas, 0)
 
     n = len(sigmas) - 1
+    if x.ndim not in (4, 5):
+        return full(f"a {x.ndim}D latent (it works on pictures and video)")
     if extra_args.get("denoise_mask") is not None:
         return full("inpaint mask (it only works on the whole picture)")
+    spatial = spatial_conds(model)
+    if spatial:
+        return full(spatial)
     kind, noise_scale = model_kind(model)
     if kind is None:
         return full("this kind of model isn't supported (flow models and SD-family models are)")
@@ -202,15 +242,19 @@ def sample_rapid(model, x, sigmas, extra_args=None, callback=None, disable=None,
     if j is None:
         return full(why)
     H, W = x.shape[-2:]
+    if H < 8 or W < 8:
+        return full("the picture is too small to start smaller")
     h, w = small_size(H, W, float(heiss_scale))
     if h >= H or w >= W:
         return full("the picture is too small to start smaller")
 
     xs = shrink_start(model, x, float(sigmas[0]), h, w, kind, noise_scale)
     y = run(xs, sigmas[: j + 1], 0)
+    reset_shape_caches(model)
     t = float(sigmas[j])
     X, t2 = grow(y, H, W, t, int(extra_args.get("seed", 0) or 0) + 7, kind, noise_scale)
-    rest = after_grow(sigmas, j, t2, kind, bool(heiss_smooth))
+    # One more full-size step is worth it on longer runs; on a few-step distill it costs more than it saves.
+    rest = after_grow(sigmas, j, t2, kind, bool(heiss_smooth) and n >= SMOOTH_FROM_STEPS)
     extra = len(rest) - 1 - (n - j)
     report({
         "active": True, "small_steps": j, "full_steps": n - j, "switch_noise": round(flow_t(t, kind), 4),
