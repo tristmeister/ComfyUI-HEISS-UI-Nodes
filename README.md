@@ -43,6 +43,18 @@ The central test samples Gaussian data with its exact denoiser. Each frequency's
 COMFYUI_PATH=/path/to/ComfyUI /path/to/ComfyUI/python -m unittest discover -s tests -v
 ```
 
+## HEISS Rapid Guidance
+
+**The late detail steps at half the cost on models that use CFG.**
+
+With CFG above 1, every step runs the model twice: once with the prompt and once without. The steps that decide what the picture shows need that push. The late steps only refine detail that's already there, and do nearly as well without it. HEISS Rapid Guidance keeps CFG while the noise level is at or above `cfg_until` (default 0.3, on the same 0..1 scale as Rapid). Below that it samples at CFG 1, where ComfyUI skips the second pass.
+
+Use it in place of `CFGGuider`:
+
+`HEISS Rapid Guidance → SamplerCustomAdvanced`
+
+It stacks with HEISS Rapid: Rapid makes the early steps cheap, and this makes the late ones cheaper. At CFG 1 (Turbo and Lightning models) there's nothing to save, and it behaves like the plain guider.
+
 ### Credits
 
 - **SPEED**: "Spectral Progressive Diffusion for Efficient Image and Video Generation", Howard Xiao, Brian Chao, Lior Yariv and Gordon Wetzstein, 2026 ([paper](https://arxiv.org/abs/2605.18736), [code](https://github.com/howardhx/speed), MIT).
