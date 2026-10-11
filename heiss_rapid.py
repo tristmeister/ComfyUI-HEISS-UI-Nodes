@@ -34,7 +34,9 @@ from comfy.samplers import KSAMPLER
 
 MIN_START = 0.9  # a run that starts below this (on the flow scale) is image to image / upscale: its layout is given
 MAX_SMALL_SHARE = 0.8  # never more than this share of the steps small, whatever the switch point says
-SMOOTH_FROM_STEPS = 8  # below this the smoothing step costs more than the start saves (a 4-step run would be slower)
+# Below this the smoothing step costs more than the start saves (a 4-step run would be slower). A floor for graphs
+# wired by hand: HEISS itself sends smooth_switch off below 12 steps (SMOOTH_FROM_STEPS in its validation.js).
+SMOOTH_FROM_STEPS = 8
 
 _DCT = {}
 
