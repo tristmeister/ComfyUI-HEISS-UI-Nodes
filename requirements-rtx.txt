@@ -1,0 +1,4 @@
+# Only for HEISS RTX Video and HEISS RTX Upscale, and only on NVIDIA RTX cards (Windows or Linux). Kept out of
+# requirements.txt so Rapid installs anywhere. NVIDIA hosts the wheels (about 0.5 GB, its models included):
+#   python -m pip install -r requirements-rtx.txt --extra-index-url https://pypi.nvidia.com
+nvidia-vfx>=0.2

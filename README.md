@@ -55,10 +55,38 @@ Use it in place of `CFGGuider`:
 
 It stacks with HEISS Rapid: Rapid makes the early steps cheap, and this makes the late ones cheaper. At CFG 1 (Turbo and Lightning models) there's nothing to save, and it behaves like the plain guider.
 
+## HEISS RTX Video and HEISS RTX Upscale
+
+**NVIDIA RTX Video Super Resolution and Frame Generation: videos upscaled in seconds, and smoother.** NVIDIA RTX cards only (20-series and newer; smoothing needs a 40-series or newer), on Windows or Linux.
+
+Both run NVIDIA's own models through its `nvidia-vfx` package. Upscaling sharpens and cleans what is already in a frame: it doesn't invent new detail the way SeedVR2 does, which is why it takes seconds, not minutes.
+
+- **HEISS RTX Video** (`VIDEO` → a saved MP4 with its sound): reads a video one frame at a time, optionally cleans it (deblur or denoise), optionally adds frames in between (`smooth` 2 turns 16 fps into 32 at the same length), upscales each frame and writes it straight to the encoder. Memory stays flat however long the video or large the output. Load Video's file is read straight from disk. It encodes with H.264 NVENC when ComfyUI's FFmpeg has it and the size fits (4096 per side), otherwise with libx264, without failing either way.
+- **HEISS RTX Upscale** (`IMAGE` → `IMAGE`): pictures and short frame batches.
+
+| Input | Default | What it does |
+|---|---|---|
+| `scale` | 2.0 | Output size per side, 1 to 4, rounded to a multiple of 8. |
+| `quality` | `HIGHBITRATE_HIGH` (video), `ULTRA` (pictures) | `HIGHBITRATE_*` for clean sources such as fresh frames, `HIGH`/`ULTRA` for compressed files, `DENOISE_*`/`DEBLUR_*` keep the size. `ULTRA` costs much more VRAM for little on most video. |
+| `cleanup` | none | A deblur or denoise pass at the source size first. Try `DEBLUR_MEDIUM` when the upscale alone looks like it did little. |
+| `smooth` | 1 | Frame rate multiplier from RTX Frame Generation (2–4). |
+
+`GET /heiss/rtx/status` says whether this machine can run them and, if not, why: the card, ComfyUI's PyTorch and CUDA, and whether NVIDIA's package is installed. With `?probe=1` it also runs a tiny upscale to prove it works with this driver.
+
+**Install:** NVIDIA's package isn't in `requirements.txt`, so this pack still installs on a Mac or an AMD card. On an NVIDIA machine, with ComfyUI's own Python (about 0.5 GB, models included):
+
+```
+python -m pip install -r requirements-rtx.txt --extra-index-url https://pypi.nvidia.com
+```
+
+NVIDIA asks for driver 570 or newer. Comfy-Org's own nodes say PyTorch built for CUDA 13 (cu130) is required; nothing in these nodes depends on it, and the status check above reports what actually runs.
+
 ### Credits
 
 - **SPEED**: "Spectral Progressive Diffusion for Efficient Image and Video Generation", Howard Xiao, Brian Chao, Lior Yariv and Gordon Wetzstein, 2026 ([paper](https://arxiv.org/abs/2605.18736), [code](https://github.com/howardhx/speed), MIT).
 - **[LC Speed Boost](https://github.com/lonecatone23/ComfyUI_LC123_nodes)** by lonecatone23 (MIT): the on-GPU sampler wrapper this node is adapted from, and the SDXL-family support.
+- **[Comfy-Org/Nvidia_RTX_Nodes_ComfyUI](https://github.com/Comfy-Org/Nvidia_RTX_Nodes_ComfyUI)** (Apache-2.0): how HEISS RTX drives NVIDIA's effects (frame layout, DLPack copies, batch sizes, the alpha channel).
+- **[tritant/ComfyUI_NVIDIA_RTX_VSR_Long_Video](https://github.com/tritant/ComfyUI_NVIDIA_RTX_VSR_Long_Video)** (Apache-2.0): streaming a video through VSR with flat memory, reading Load Video's file directly, the cleanup pass and keeping the audio.
 - **[ComfyUI-SPEED, SwarmNeo fork](https://github.com/aoleg/ComfyUI-SPEED)** by aoleg (MIT), after [ruwwww/ComfyUI-SPEED](https://github.com/ruwwww/ComfyUI-SPEED): the measurements showing that the quality limit is a noise level, and the cap on the small share.
 
-MIT licensed; see LICENSE.
+MIT licensed; see LICENSE. NVIDIA's `nvidia-vfx` package and its models are NVIDIA's, under NVIDIA's terms.
