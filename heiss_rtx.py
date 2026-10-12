@@ -54,7 +54,7 @@ def nvvfx_module():
     except ImportError as error:
         raise RTXUnavailable(
             "NVIDIA's RTX video package (nvidia-vfx) isn't installed in ComfyUI's Python. Install it with ComfyUI's "
-            f"own Python: python -m pip install nvidia-vfx --extra-index-url {NVIDIA_INDEX}, then restart ComfyUI. "
+            f"own Python: python -m pip install nvidia-vfx --extra-index-url {NVIDIA_INDEX}, then run this again. "
             f"({error})") from error
     return nvvfx
 
