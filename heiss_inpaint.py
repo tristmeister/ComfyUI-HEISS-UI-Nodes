@@ -32,7 +32,9 @@ import comfy.utils
 
 WORK = 512
 LIMITS = {"scale": 0.08, "shear": 0.03, "shift": 0.05, "gain": 0.85, "min_ring": 2000, "min_ring_share": 0.02}
-COLOR = {"mean": 0.1, "spread": (0.75, 1.0 / 0.75), "min_weight": 500}
+# Edit models drift up to ~0.045 in a channel's mean (Flux.2 Klein, Qwen-Image 2.1 on real photos); a requested
+# change that bleeds onto the ring (a curtain greening the flag around it) reaches 0.09 and must be left alone.
+COLOR = {"mean": 0.06, "spread": (0.75, 1.0 / 0.75), "min_weight": 500}
 # The ring starts this many full-size pixels past the last trace of the mask.
 RING_GAP = 4
 

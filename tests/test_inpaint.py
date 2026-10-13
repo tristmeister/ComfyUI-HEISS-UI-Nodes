@@ -158,6 +158,14 @@ class ColorMatch(unittest.TestCase):
         self.assertFalse(info["matched"])
         self.assertTrue(torch.equal(out, patch))
 
+    def test_a_change_bleeding_onto_the_ring_is_left_as_meant(self):
+        # Flux.2 Klein asked for a green curtain over a flag: the ring came back 24, 9 and 20 levels off.
+        # Matching that tinted the curtain grey and the jacket next to it purple.
+        patch = (self.base - torch.tensor([24.0, 9.0, 20.0]) / 255).clamp(0, 1)
+        out, info = inpaint.color_match(patch, self.base, self.keep)
+        self.assertFalse(info["matched"], info)
+        self.assertTrue(torch.equal(out, patch))
+
     def test_new_content_inside_the_mask_does_not_count(self):
         new = self.base.clone()
         m = (self.mask > 0.01)[..., None]
