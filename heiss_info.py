@@ -12,13 +12,14 @@ Keep it a plain integer on one line.
   3  HEISS RTX Video and HEISS RTX Upscale; this route
   4  HEISS Inpaint Stitch
   5  HEISS Inpaint Stitch: colour match leaves a meant change alone (0.06), bicubic correction
+  6  HEISS RTX: nvidia-vfx older than 0.2 is reported as too old, not ready
 """
 
 from __future__ import annotations
 
 import os
 
-PACK_VERSION = 5
+PACK_VERSION = 6
 
 
 def _commit():

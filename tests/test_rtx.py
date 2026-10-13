@@ -204,6 +204,78 @@ class Loading(unittest.TestCase):
         self.assertIn("NVIDIA RTX", status["reason"])
 
 
+class OldPackage(unittest.TestCase):
+    """nvidia-vfx 0.1.0.1 (what an early install left in ComfyUI's venv): no ImageEncoding, no Frame Generation."""
+
+    def setUp(self):
+        self.saved = sys.modules.get("nvvfx")
+
+    def tearDown(self):
+        if self.saved is not None:
+            sys.modules["nvvfx"] = self.saved
+        else:
+            sys.modules.pop("nvvfx", None)
+
+    @staticmethod
+    def old_surface():
+        nv = types.ModuleType("nvvfx")
+
+        class VideoSuperRes:
+            QualityLevel = enum.IntEnum("QualityLevel", ["HIGH"])
+
+            def __init__(self, quality=None, device=0):
+                pass
+
+        nv.VideoSuperRes = VideoSuperRes
+        sys.modules["nvvfx"] = nv
+        return nv
+
+    def on_an_rtx_card(self, version):
+        from unittest import mock
+        props = SimpleNamespace(major=8, minor=6, name="NVIDIA GeForce RTX 3070", total_memory=8 << 30)
+        return [mock.patch.object(heiss_rtx, "effect_device", lambda: (torch.device("cpu"), 0)),
+                mock.patch.object(torch.cuda, "get_device_properties", lambda index: props),
+                mock.patch("importlib.metadata.version", lambda name: version)]
+
+    def status(self, version):
+        patches = self.on_an_rtx_card(version)
+        for patch in patches:
+            patch.start()
+        try:
+            return heiss_rtx.rtx_status()
+        finally:
+            for patch in patches:
+                patch.stop()
+
+    def test_versions_older_than_0_2_are_too_old(self):
+        self.assertTrue(heiss_rtx.nvvfx_version_too_old("0.1.0.1"))
+        self.assertFalse(heiss_rtx.nvvfx_version_too_old("0.2.0.0"))
+        self.assertFalse(heiss_rtx.nvvfx_version_too_old("0.10"))
+        self.assertFalse(heiss_rtx.nvvfx_version_too_old(""))
+
+    def test_the_status_check_says_an_old_package_is_not_ready(self):
+        sys.modules.pop("nvvfx", None)
+        status = self.status("0.1.0.1")
+        self.assertFalse(status["ready"])
+        self.assertTrue(status["nvvfxTooOld"])
+        self.assertIn("0.2 or newer", status["reason"])
+        ready = self.status("0.2.0.0")
+        self.assertTrue(ready["ready"], ready)
+
+    def test_an_old_package_still_loaded_asks_for_a_restart(self):
+        self.old_surface()
+        status = self.status("0.2.0.0")
+        self.assertFalse(status["ready"])
+        self.assertIn("Restart ComfyUI", status["reason"])
+
+    def test_loading_an_old_package_says_how_to_update_it(self):
+        self.old_surface()
+        with self.assertRaises(heiss_rtx.RTXUnavailable) as caught:
+            heiss_rtx.nvvfx_module()
+        self.assertIn("too old", str(caught.exception))
+        self.assertIn("requirements-rtx.txt", str(caught.exception))
+
+
 class Sizes(unittest.TestCase):
     def test_rounds_to_eight(self):
         self.assertEqual(heiss_rtx.output_size(832, 480, 2.0, "HIGHBITRATE_HIGH"), (1664, 960))

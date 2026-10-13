@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sys
 import time
 from contextlib import ExitStack, contextmanager, nullcontext
 from fractions import Fraction
@@ -40,11 +42,25 @@ MAX_SIDE = 8192
 NVENC_MAX_SIDE = 4096  # H.264 NVENC's limit per side; above it libx264 encodes
 FRAME_GENERATION_CAPABILITY = (8, 9)  # Ada (RTX 40) and newer
 NVIDIA_INDEX = "https://pypi.nvidia.com"
+# nvidia-vfx 0.1 has no ImageEncoding, no strength and no Frame Generation; these nodes are written for 0.2.
+MIN_NVVFX = (0, 2)
+UPDATE_NVVFX = f"python -m pip install -r requirements-rtx.txt --extra-index-url {NVIDIA_INDEX}"
 IMAGE_CHUNK_PIXELS = 16 * 1024 * 1024  # output pixels moved to the GPU at once by HEISS RTX Upscale
 
 
 class RTXUnavailable(RuntimeError):
     pass
+
+
+def nvvfx_version_too_old(version):
+    """Whether an installed nvidia-vfx version string ("0.1.0.1") is older than these nodes need."""
+    parts = tuple(int(part) for part in re.findall(r"\d+", str(version or ""))[:3])
+    return bool(parts) and parts < MIN_NVVFX
+
+
+def _current_surface(nvvfx):
+    """0.2's surface: its enums at the top. 0.1 has neither, whatever its version says."""
+    return hasattr(nvvfx, "ImageEncoding") and hasattr(nvvfx, "QualityLevel")
 
 
 def nvvfx_module():
@@ -56,6 +72,10 @@ def nvvfx_module():
             "NVIDIA's RTX video package (nvidia-vfx) isn't installed in ComfyUI's Python. Install it with ComfyUI's "
             f"own Python: python -m pip install nvidia-vfx --extra-index-url {NVIDIA_INDEX}, then run this again. "
             f"({error})") from error
+    if not _current_surface(nvvfx):
+        raise RTXUnavailable(
+            "NVIDIA's RTX video package (nvidia-vfx) is too old: 0.2 or newer is needed. Update it with ComfyUI's own "
+            f"Python, in this pack's folder: {UPDATE_NVVFX}, then restart ComfyUI.")
     return nvvfx
 
 
@@ -68,11 +88,6 @@ def effect_device():
         raise RTXUnavailable("RTX upscaling runs only on an NVIDIA RTX card, and ComfyUI isn't using one.")
     index = device.index if device.index is not None else torch.cuda.current_device()
     return device, index
-
-
-def _enum(nvvfx, owner, name):
-    """nvidia-vfx 0.2 exports its enums at the top; 0.1 kept them on the effect class."""
-    return getattr(nvvfx, name, None) or getattr(owner, name)
 
 
 def output_size(width, height, scale, quality):
@@ -88,8 +103,8 @@ def output_size(width, height, scale, quality):
 
 def _load_vsr(nvvfx, device_index, quality, strength, in_w, in_h, out_w, out_h):
     cls = nvvfx.VideoSuperRes
-    effect = cls(quality=_enum(nvvfx, cls, "QualityLevel")[quality], strength=float(strength), device=device_index,
-                 image_encoding=_enum(nvvfx, cls, "ImageEncoding").RGB8)
+    effect = cls(quality=nvvfx.QualityLevel[quality], strength=float(strength), device=device_index,
+                 image_encoding=nvvfx.ImageEncoding.RGB8)
     for name, value in (("input_width", in_w), ("input_height", in_h)):
         try:
             setattr(effect, name, value)  # 0.1 wants them; 0.2 reads them from each frame
@@ -105,7 +120,7 @@ def _load_frame_generation(nvvfx, device_index, mode, multiplier, width, height)
     cls = nvvfx.VideoFrameGeneration
     try:
         effect = cls(mode=cls.Mode[mode], automatic_shot_change_detection_enabled=True, device=device_index,
-                     image_encoding=_enum(nvvfx, cls, "ImageEncoding").RGB8)
+                     image_encoding=nvvfx.ImageEncoding.RGB8)
         effect.input_width = width
         effect.input_height = height
         effect.frame_multiplier = multiplier
@@ -555,6 +570,16 @@ def rtx_status(probe=False):
         return status
     if not status["nvvfx"]:
         status["reason"] = "NVIDIA's RTX video package (nvidia-vfx) isn't installed yet."
+        return status
+    # An old one installed counts as missing for HEISS, which then offers the package step (pip upgrades it).
+    if nvvfx_version_too_old(status["nvvfx"]):
+        status["nvvfxTooOld"] = True
+        status["reason"] = f"NVIDIA's RTX video package is too old ({status['nvvfx']}); 0.2 or newer is needed."
+        return status
+    # Updated on disk while ComfyUI still runs the old one it imported earlier.
+    loaded = sys.modules.get("nvvfx")
+    if loaded is not None and not _current_surface(loaded):
+        status["reason"] = "NVIDIA's RTX video package was updated, but ComfyUI still has the old one loaded. Restart ComfyUI."
         return status
     if not probe:
         status["ready"] = True
