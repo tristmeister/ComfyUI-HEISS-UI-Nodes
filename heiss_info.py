@@ -11,13 +11,14 @@ Keep it a plain integer on one line.
   2  HEISS Rapid Guidance
   3  HEISS RTX Video and HEISS RTX Upscale; this route
   4  HEISS Inpaint Stitch
+  5  HEISS Inpaint Stitch: colour match leaves a meant change alone (0.06), bicubic correction
 """
 
 from __future__ import annotations
 
 import os
 
-PACK_VERSION = 4
+PACK_VERSION = 5
 
 
 def _commit():

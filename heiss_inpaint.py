@@ -11,7 +11,7 @@ show the original, and corrects them before blending:
                (scale within 8 %, shear under 0.03, shift under 5 % of the box) and lowers the ring difference by 15 %
                or more: a fit that locked onto the wrong detail gains a few per cent at best, a real one far more. A flat ring (nothing to fit on) or a ring too small is left alone.
   color_match  per-channel mean and spread of the result moved onto the original's, both measured on the ring. Kept
-               only when the drift is the size of a model's drift (means within 0.1, spread within 0.75-1.33); a
+               only when the drift is the size of a model's drift (means within 0.06, spread within 0.75-1.33); a
                larger difference is taken as meant and left alone.
 
 Models that sample only inside a latent mask (SDXL, Flux.1, Z-Image ...) keep the ring as it was: both steps find
