@@ -101,7 +101,7 @@ Inpainting crops the painted area with some context around it, the model repaint
 
 HEISS Inpaint Stitch measures both on the ring around the mask, where the result should still show the original, and corrects them before blending:
 
-- **Align** fits a small shift, zoom and rotation (an affine fit, with a gain and a bias so a colour drift doesn't pull it). It keeps the fit only when it's plausible (scale within 8%, shift under 5% of the box, little shear) and it lowers the ring's difference by 15% or more. A flat ring, with nothing to line up on, is left alone.
+- **Align** fits a small shift, zoom and rotation (an affine fit, with a gain and a bias so a colour drift doesn't pull it). It keeps the fit only when it's plausible (scale within 8%, shift under 5% of the box, little shear) and it lowers the ring's difference by 15% or more. A flat ring, with nothing to line up on, is left alone, and so is a fit that moves no pixel by half a pixel or more: it couldn't show, and resampling would cost detail.
 - **Color match** moves each channel's mean and spread onto the original's, measured on the same ring. A drift the size of a model's (means within 0.06, spread within 0.75–1.33) is corrected; a larger difference is taken as meant and left alone.
 
 Models that sample only inside a latent mask (SDXL, Flux.1, Z-Image and similar) keep the ring as it was. For them both steps find nothing to correct, and the node is a plain composite.

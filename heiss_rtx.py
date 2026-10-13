@@ -575,6 +575,11 @@ def rtx_status(probe=False):
     if nvvfx_version_too_old(status["nvvfx"]):
         status["nvvfxTooOld"] = True
         status["reason"] = f"NVIDIA's RTX video package is too old ({status['nvvfx']}); 0.2 or newer is needed."
+        # Imported here already (a run tried it): Windows keeps its DLLs locked, and pip would leave it half
+        # removed. HEISS asks for a ComfyUI restart first; the nodes import it only when they run.
+        if "nvvfx" in sys.modules and os.name == "nt":
+            status["nvvfxLocked"] = True
+            status["reason"] += " ComfyUI has the old one loaded, which locks its files on Windows: restart ComfyUI first."
         return status
     # Updated on disk while ComfyUI still runs the old one it imported earlier.
     loaded = sys.modules.get("nvvfx")

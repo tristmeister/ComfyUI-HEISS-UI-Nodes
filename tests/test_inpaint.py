@@ -94,6 +94,14 @@ class Align(unittest.TestCase):
     def test_a_colour_drift_does_not_pull_the_geometry(self):
         self.check_recovers([[1.02, 0], [0, 1.02]], (5.0, 5.0), gain=0.9, offset=0.06)
 
+    def test_under_half_a_pixel_is_left_alone(self):
+        # what masked-sampling models come back with: a fit there, but no line could double, so no resampling
+        patch = drifted(self.base, [[1, 0], [0, 1]], (0.3, 0.2), self.mask, self.new)
+        found = inpaint.fit(self.base, patch, self.ring)
+        self.assertFalse(found["aligned"])
+        self.assertEqual(found["reason"], "under half a pixel", found)
+        self.assertLess(found["move"], 0.5)
+
     def test_no_drift_finds_no_gain(self):
         patch = drifted(self.base, [[1, 0], [0, 1]], (0.0, 0.0), self.mask, self.new)
         found = inpaint.fit(self.base, patch, self.ring)

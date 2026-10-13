@@ -262,6 +262,19 @@ class OldPackage(unittest.TestCase):
         ready = self.status("0.2.0.0")
         self.assertTrue(ready["ready"], ready)
 
+    def test_an_old_package_loaded_on_windows_is_locked(self):
+        from unittest import mock
+        self.old_surface()
+        with mock.patch.object(heiss_rtx.os, "name", "nt"):
+            status = self.status("0.1.0.1")
+        self.assertTrue(status["nvvfxTooOld"])
+        self.assertTrue(status["nvvfxLocked"])
+        self.assertIn("restart ComfyUI first", status["reason"])
+        # not imported (ComfyUI just started): nothing is locked, pip can upgrade it
+        sys.modules.pop("nvvfx", None)
+        with mock.patch.object(heiss_rtx.os, "name", "nt"):
+            self.assertNotIn("nvvfxLocked", self.status("0.1.0.1"))
+
     def test_an_old_package_still_loaded_asks_for_a_restart(self):
         self.old_surface()
         status = self.status("0.2.0.0")

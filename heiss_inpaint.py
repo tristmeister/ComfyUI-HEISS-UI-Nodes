@@ -9,7 +9,9 @@ show the original, and corrects them before blending:
   align        an affine fit (Lucas-Kanade, Gauss-Newton with a gain and a bias so a colour drift does not pull the
                geometry, Huber weights, on a pyramid at most 512 px on the long side). Kept only when it is plausible
                (scale within 8 %, shear under 0.03, shift under 5 % of the box) and lowers the ring difference by 15 %
-               or more: a fit that locked onto the wrong detail gains a few per cent at best, a real one far more. A flat ring (nothing to fit on) or a ring too small is left alone.
+               or more: a fit that locked onto the wrong detail gains a few per cent at best, a real one far more.
+               A fit that moves no pixel of the box by half a pixel or more is left alone: it couldn't show, and
+               resampling would cost detail. A flat ring (nothing to fit on) or a ring too small is left alone.
   color_match  per-channel mean and spread of the result moved onto the original's, both measured on the ring. Kept
                only when the drift is the size of a model's drift (means within 0.06, spread within 0.75-1.33); a
                larger difference is taken as meant and left alone.
@@ -31,7 +33,10 @@ import torch.nn.functional as F
 import comfy.utils
 
 WORK = 512
-LIMITS = {"scale": 0.08, "shear": 0.03, "shift": 0.05, "gain": 0.85, "min_ring": 2000, "min_ring_share": 0.02}
+LIMITS = {"scale": 0.08, "shear": 0.03, "shift": 0.05, "gain": 0.85, "min_ring": 2000, "min_ring_share": 0.02,
+          # Under this many pixels anywhere in the box a correction can't show as a doubled line, and resampling
+          # still costs detail (masked-sampling models come back about 0.3 px off from the resize and VAE round trip).
+          "min_move": 0.5}
 # Edit models drift up to ~0.045 in a channel's mean (Flux.2 Klein, Qwen-Image 2.1 on real photos); a requested
 # change that bleeds onto the ring (a curtain greening the flag around it) reaches 0.09 and must be left alone.
 COLOR = {"mean": 0.06, "spread": (0.75, 1.0 / 0.75), "min_weight": 500}
@@ -262,6 +267,12 @@ def fit(base_rgb, patch_rgb, ring_full):
     if (abs(sx - 1) > LIMITS["scale"] or abs(sy - 1) > LIMITS["scale"] or shear > LIMITS["shear"]
             or abs(tf[0]) > LIMITS["shift"] * W or abs(tf[1]) > LIMITS["shift"] * H):
         return {"aligned": False, "reason": "fit out of range", **out}
+    corners = [(0.0, 0.0), (W - 1.0, 0.0), (0.0, H - 1.0), (W - 1.0, H - 1.0)]
+    move = max(math.hypot(float(A[0, 0]) * (x - cf[0]) + float(A[0, 1]) * (y - cf[1]) + cf[0] + tf[0] - x,
+                          float(A[1, 0]) * (x - cf[0]) + float(A[1, 1]) * (y - cf[1]) + cf[1] + tf[1] - y) for x, y in corners)
+    out["move"] = round(move, 2)
+    if move < LIMITS["min_move"]:
+        return {"aligned": False, "reason": "under half a pixel", **out}
     before = ring_difference(T, I, R)
     after = ring_difference(T, I, R, A.to(T.dtype), (float(p[4]), float(p[5])), c0)
     if before is None or after is None:
