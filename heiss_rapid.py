@@ -70,14 +70,30 @@ def shrink(x, h, w):
     return unspectrum(spectrum(x)[..., :h, :w].contiguous())
 
 
-def grow(y, H, W, t, seed, kind="flow", noise_scale=1.0):
+def high_noise(start, picture, h, w):
+    """The run's own noise above the small grid's frequencies, as unit white noise in the cosine basis: the start
+    state's high corner with the picture in it (if any) taken out, at unit strength. The small run never saw it, so
+    handing it back at the grow keeps the run on the noise its seed drew (as a run without Rapid has it)."""
+    c = spectrum(start if picture is None else start - picture.to(start.device))
+    c[..., :h, :w] = 0.0
+    dims = tuple(range(1, c.ndim))
+    count = c[0].numel() - c[0][..., :h, :w].numel()
+    rms = (c.square().sum(dim=dims, keepdim=True) / max(1, count)).sqrt().clamp_min(1e-8)
+    return c / rms
+
+
+def grow(y, H, W, t, seed, kind="flow", noise_scale=1.0, noise=None):
     """Small state at noise level t (flow scale for "flow", sigma for "sigma") -> (full size state, its new noise
-    level). The new high frequencies get fresh noise as strong as the noise already in the state."""
+    level). The new high frequencies get noise as strong as the noise already in the state: `noise` (unit white
+    noise in the cosine basis, from high_noise) when given, else fresh noise drawn from `seed`."""
     h, w = y.shape[-2:]
     c = torch.zeros(*y.shape[:-2], H, W, device=y.device, dtype=torch.float32)
     c[..., :h, :w] = spectrum(y)
-    g = torch.Generator(device="cpu").manual_seed(int(seed) & 0xFFFFFFFFFFFFFFFF)
-    fresh = torch.randn(*y.shape[:-2], H, W, generator=g, dtype=torch.float32).to(y.device)
+    if noise is not None:
+        fresh = noise.to(device=y.device, dtype=torch.float32).clone()
+    else:
+        g = torch.Generator(device="cpu").manual_seed(int(seed) & 0xFFFFFFFFFFFFFFFF)
+        fresh = torch.randn(*y.shape[:-2], H, W, generator=g, dtype=torch.float32).to(y.device)
     fresh[..., :h, :w] = 0.0  # white noise in this basis: only where the small grid had nothing
     c += (t * noise_scale) * fresh
     r = math.sqrt((H * W) / float(h * w))
@@ -143,15 +159,22 @@ def small_size(H, W, scale):
     return min(h, H - 2 if H > 2 else H), min(w, W - 2 if W > 2 else W)
 
 
+def start_picture(model, x, s0, kind):
+    """The picture part of the starting state (a latent to start from, as the state carries it), or None."""
+    lat = getattr(model, "latent_image", None)
+    if lat is None or lat.shape != x.shape or not torch.count_nonzero(lat):
+        return None
+    return (1.0 - s0) * lat if kind == "flow" else lat
+
+
 def shrink_start(model, x, s0, h, w, kind, noise_scale):
     """The starting state at the small size. Noise shrinks as noise; the picture in it (if any) shrinks as a picture,
     which comes out r times too strong and is put back to its own strength."""
-    lat = getattr(model, "latent_image", None)
     small = shrink(x, h, w)
-    if lat is None or lat.shape != x.shape or not torch.count_nonzero(lat):
+    picture = start_picture(model, x, s0, kind)
+    if picture is None:
         return small.to(x.dtype)
     r = math.sqrt((x.shape[-2] * x.shape[-1]) / float(h * w))
-    picture = (1.0 - s0) * lat if kind == "flow" else lat
     return (small - shrink(picture.to(x.device), h, w) * (1.0 - 1.0 / r)).to(x.dtype)
 
 
@@ -251,10 +274,12 @@ def sample_rapid(model, x, sigmas, extra_args=None, callback=None, disable=None,
         return full("the picture is too small to start smaller")
 
     xs = shrink_start(model, x, float(sigmas[0]), h, w, kind, noise_scale)
+    # The noise the small run can't hold, kept for the grow (the same draw a run without Rapid samples with).
+    noise = high_noise(x, start_picture(model, x, float(sigmas[0]), kind), h, w)
     y = run(xs, sigmas[: j + 1], 0)
     reset_shape_caches(model)
     t = float(sigmas[j])
-    X, t2 = grow(y, H, W, t, int(extra_args.get("seed", 0) or 0) + 7, kind, noise_scale)
+    X, t2 = grow(y, H, W, t, int(extra_args.get("seed", 0) or 0) + 7, kind, noise_scale, noise=noise)
     # One more full-size step is worth it on longer runs; on a few-step distill it costs more than it saves.
     rest = after_grow(sigmas, j, t2, kind, bool(heiss_smooth) and n >= SMOOTH_FROM_STEPS)
     extra = len(rest) - 1 - (n - j)
