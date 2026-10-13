@@ -116,6 +116,24 @@ class Align(unittest.TestCase):
         self.assertEqual(inpaint.fit(self.base, self.base, ring)["reason"], "ring too small")
 
 
+class Warp(unittest.TestCase):
+    def test_no_move_is_exact(self):
+        rgb = texture(120, 90)
+        out = inpaint.warp(rgb, torch.eye(2), (0.0, 0.0), (59.5, 44.5))
+        self.assertLess(float((out - rgb).abs().max()), 1e-4)
+
+    def test_a_fraction_of_a_pixel_keeps_the_detail(self):
+        # a 0.4 px correction, as on a masked-sampling model: bicubic keeps more fine detail than bilinear did
+        rgb = texture(200, 160)
+        out = inpaint.warp(rgb, torch.eye(2), (0.4, 0.4), (99.5, 79.5))
+        H, W = rgb.shape[:2]
+        ys, xs = torch.meshgrid(torch.arange(H, dtype=torch.float32), torch.arange(W, dtype=torch.float32), indexing="ij")
+        grid = torch.stack([(xs + 0.4) / (W - 1) * 2 - 1, (ys + 0.4) / (H - 1) * 2 - 1], dim=-1)[None]
+        bilinear = torch.nn.functional.grid_sample(rgb.permute(2, 0, 1)[None], grid, mode="bilinear", padding_mode="border", align_corners=True)[0].permute(1, 2, 0)
+        detail = lambda img: float((img[1:, :] - img[:-1, :]).abs().mean() + (img[:, 1:] - img[:, :-1]).abs().mean())
+        self.assertGreater(detail(out), detail(bilinear) * 1.02)
+
+
 class ColorMatch(unittest.TestCase):
     def setUp(self):
         self.base = texture(400, 300)

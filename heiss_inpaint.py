@@ -271,13 +271,16 @@ def fit(base_rgb, patch_rgb, ring_full):
 
 
 def warp(rgb, A, t, c):
-    """[H, W, 3] read through out(x) = rgb(A (x - c) + c + t), bilinear, edges repeated."""
+    """[H, W, 3] read through out(x) = rgb(A (x - c) + c + t), bicubic, edges repeated.
+
+    Bicubic, not bilinear: the corrections are often a fraction of a pixel (masked-sampling models come back about
+    0.3 px off from the resize and VAE round trip), and bilinear reading between pixels softens the whole patch."""
     H, W = rgb.shape[:2]
     ys, xs = torch.meshgrid(torch.arange(H, dtype=torch.float32), torch.arange(W, dtype=torch.float32), indexing="ij")
     X = A[0, 0] * (xs - c[0]) + A[0, 1] * (ys - c[1]) + c[0] + t[0]
     Y = A[1, 0] * (xs - c[0]) + A[1, 1] * (ys - c[1]) + c[1] + t[1]
     grid = torch.stack([X / max(1, W - 1) * 2 - 1, Y / max(1, H - 1) * 2 - 1], dim=-1)[None]
-    out = F.grid_sample(rgb.permute(2, 0, 1)[None].float(), grid, mode="bilinear", padding_mode="border", align_corners=True)
+    out = F.grid_sample(rgb.permute(2, 0, 1)[None].float(), grid, mode="bicubic", padding_mode="border", align_corners=True)
     return out[0].permute(1, 2, 0).clamp(0, 1)
 
 
