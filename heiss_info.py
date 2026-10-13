@@ -14,13 +14,14 @@ Keep it a plain integer on one line.
   5  HEISS Inpaint Stitch: colour match leaves a meant change alone (0.06), bicubic correction
   6  HEISS RTX: nvidia-vfx older than 0.2 is reported as too old, not ready
   7  HEISS Inpaint Stitch leaves corrections under half a pixel alone; HEISS RTX says when an old package is locked
+  8  HEISS Prompt Enhance; POST /heiss/models/rescan
 """
 
 from __future__ import annotations
 
 import os
 
-PACK_VERSION = 7
+PACK_VERSION = 8
 
 
 def _commit():
