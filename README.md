@@ -55,10 +55,41 @@ Use it in place of `CFGGuider`:
 
 It stacks with HEISS Rapid: Rapid makes the early steps cheap, and this makes the late ones cheaper. At CFG 1 (Turbo and Lightning models) there's nothing to save, and it behaves like the plain guider.
 
-### Credits
+### Rapid credits
 
 - **SPEED**: "Spectral Progressive Diffusion for Efficient Image and Video Generation", Howard Xiao, Brian Chao, Lior Yariv and Gordon Wetzstein, 2026 ([paper](https://arxiv.org/abs/2605.18736), [code](https://github.com/howardhx/speed), MIT).
 - **[LC Speed Boost](https://github.com/lonecatone23/ComfyUI_LC123_nodes)** by lonecatone23 (MIT): the on-GPU sampler wrapper this node is adapted from, and the SDXL-family support.
 - **[ComfyUI-SPEED, SwarmNeo fork](https://github.com/aoleg/ComfyUI-SPEED)** by aoleg (MIT), after [ruwwww/ComfyUI-SPEED](https://github.com/ruwwww/ComfyUI-SPEED): the measurements showing that the quality limit is a noise level, and the cap on the small share.
+
+## HEISS Inpaint Stitch
+
+**Inpainted crops that go back in without a visible seam, even from edit models.**
+
+Inpainting crops the painted area with some context around it, the model repaints the crop, and the crop goes back onto the picture through a soft mask. Edit models (Qwen-Image Edit, Flux.2 / Klein with a reference) re-render the whole crop, and they often shift or zoom it by a few pixels and make it a shade brighter, darker or warmer. Pasted back as it is, lines that cross the mask edge double up and the painted area looks a shade off.
+
+HEISS Inpaint Stitch measures both on the ring around the mask, where the result should still show the original, and corrects them before blending:
+
+- **Align** fits a small shift, zoom and rotation (an affine fit, with a gain and a bias so a colour drift doesn't pull it). It keeps the fit only when it's plausible (scale within 8%, shift under 5% of the box, little shear) and it lowers the ring's difference by 15% or more. A flat ring, with nothing to line up on, is left alone.
+- **Color match** moves each channel's mean and spread onto the original's, measured on the same ring. A drift the size of a model's (means within 0.1, spread within 0.75–1.33) is corrected; a larger difference is taken as meant and left alone.
+
+Models that sample only inside a latent mask (SDXL, Flux.1, Z-Image and similar) keep the ring as it was. For them both steps find nothing to correct, and the node is a plain composite.
+
+### Use
+
+`VAE Decode → HEISS Inpaint Stitch → Save Image`
+
+| Input | What it is |
+|---|---|
+| `original` | The whole picture the crop was cut from. |
+| `image` | The inpainted crop, any size. It's scaled (Lanczos) to the mask's size. A batch gives a batch. |
+| `mask` | Where the crop goes over the original, at the box's own size, soft edge included. |
+| `x`, `y` | Where the box sits in the original. |
+| `align`, `color_match` | Both on by default. Off, the node is a plain composite. |
+
+Everything outside the mask stays the original's exact pixels. What it did goes to the console, and to the client that queued the run as a `heiss.inpaint` message.
+
+### Credits
+
+The idea of lining up and colour matching on the ring comes from **[Inpaint Canvas](https://github.com/DenRakEiw/ComfyUI-InpaintCanvas)** by DenRakEiw (`_align_patch`, `_color_match`). This is a separate implementation in torch, with no OpenCV.
 
 MIT licensed; see LICENSE.
