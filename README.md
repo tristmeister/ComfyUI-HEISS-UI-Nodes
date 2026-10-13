@@ -81,6 +81,10 @@ python -m pip install -r requirements-rtx.txt --extra-index-url https://pypi.nvi
 
 NVIDIA asks for driver 570 or newer. Comfy-Org's own nodes say PyTorch built for CUDA 13 (cu130) is required; nothing in these nodes depends on it, and the status check above reports what actually runs.
 
+## For HEISS UI: the pack's version
+
+`GET /heiss/nodes` returns `{ version, commit, nodes }`. `version` (`PACK_VERSION` in `heiss_info.py`) goes up by one whenever HEISS needs something new from the pack. HEISS asks for the version its features need and offers the update when the loaded copy is older.
+
 ### Credits
 
 - **SPEED**: "Spectral Progressive Diffusion for Efficient Image and Video Generation", Howard Xiao, Brian Chao, Lior Yariv and Gordon Wetzstein, 2026 ([paper](https://arxiv.org/abs/2605.18736), [code](https://github.com/howardhx/speed), MIT).

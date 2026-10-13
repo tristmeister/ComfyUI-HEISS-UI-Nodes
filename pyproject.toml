@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-heiss-ui-nodes"
-version = "0.2.0"
+version = "0.3.0"
 description = "Custom nodes for HEISS UI. HEISS Rapid: about 1.4x to 2x faster pictures at the same VRAM, by starting at half size (SPEED). HEISS RTX: NVIDIA RTX video upscaling and smoothing for videos of any length."
 readme = "README.md"
 requires-python = ">=3.10"
