@@ -93,4 +93,35 @@ NVIDIA asks for driver 570 or newer. Comfy-Org's own nodes say PyTorch built for
 - **[tritant/ComfyUI_NVIDIA_RTX_VSR_Long_Video](https://github.com/tritant/ComfyUI_NVIDIA_RTX_VSR_Long_Video)** (Apache-2.0): streaming a video through VSR with flat memory, reading Load Video's file directly, the cleanup pass and keeping the audio.
 - **[ComfyUI-SPEED, SwarmNeo fork](https://github.com/aoleg/ComfyUI-SPEED)** by aoleg (MIT), after [ruwwww/ComfyUI-SPEED](https://github.com/ruwwww/ComfyUI-SPEED): the measurements showing that the quality limit is a noise level, and the cap on the small share.
 
+## HEISS Inpaint Stitch
+
+**Inpainted crops that go back in without a visible seam, even from edit models.**
+
+Inpainting crops the painted area with some context around it, the model repaints the crop, and the crop goes back onto the picture through a soft mask. Edit models (Qwen-Image Edit, Flux.2 / Klein with a reference) re-render the whole crop, and they often shift or zoom it by a few pixels and make it a shade brighter, darker or warmer. Pasted back as it is, lines that cross the mask edge double up and the painted area looks a shade off.
+
+HEISS Inpaint Stitch measures both on the ring around the mask, where the result should still show the original, and corrects them before blending:
+
+- **Align** fits a small shift, zoom and rotation (an affine fit, with a gain and a bias so a colour drift doesn't pull it). It keeps the fit only when it's plausible (scale within 8%, shift under 5% of the box, little shear) and it lowers the ring's difference by 15% or more. A flat ring, with nothing to line up on, is left alone.
+- **Color match** moves each channel's mean and spread onto the original's, measured on the same ring. A drift the size of a model's (means within 0.1, spread within 0.75–1.33) is corrected; a larger difference is taken as meant and left alone.
+
+Models that sample only inside a latent mask (SDXL, Flux.1, Z-Image and similar) keep the ring as it was. For them both steps find nothing to correct, and the node is a plain composite.
+
+### Use
+
+`VAE Decode → HEISS Inpaint Stitch → Save Image`
+
+| Input | What it is |
+|---|---|
+| `original` | The whole picture the crop was cut from. |
+| `image` | The inpainted crop, any size. It's scaled (Lanczos) to the mask's size. A batch gives a batch. |
+| `mask` | Where the crop goes over the original, at the box's own size, soft edge included. |
+| `x`, `y` | Where the box sits in the original. |
+| `align`, `color_match` | Both on by default. Off, the node is a plain composite. |
+
+Everything outside the mask stays the original's exact pixels. What it did goes to the console, and to the client that queued the run as a `heiss.inpaint` message.
+
+### Credits
+
+The idea of lining up and colour matching on the ring comes from **[Inpaint Canvas](https://github.com/DenRakEiw/ComfyUI-InpaintCanvas)** by DenRakEiw (`_align_patch`, `_color_match`). This is a separate implementation in torch, with no OpenCV.
+
 MIT licensed; see LICENSE. NVIDIA's `nvidia-vfx` package and its models are NVIDIA's, under NVIDIA's terms.

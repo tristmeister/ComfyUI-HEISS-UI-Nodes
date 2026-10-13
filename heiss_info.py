@@ -10,13 +10,14 @@ Keep it a plain integer on one line.
   1  HEISS Rapid
   2  HEISS Rapid Guidance
   3  HEISS RTX Video and HEISS RTX Upscale; this route
+  4  HEISS Inpaint Stitch
 """
 
 from __future__ import annotations
 
 import os
 
-PACK_VERSION = 3
+PACK_VERSION = 4
 
 
 def _commit():

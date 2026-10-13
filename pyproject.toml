@@ -1,11 +1,11 @@
 [project]
 name = "comfyui-heiss-ui-nodes"
-version = "0.3.0"
-description = "Custom nodes for HEISS UI. HEISS Rapid: about 1.4x to 2x faster pictures at the same VRAM, by starting at half size (SPEED). HEISS RTX: NVIDIA RTX video upscaling and smoothing for videos of any length."
+version = "0.4.0"
+description = "Custom nodes for HEISS UI. HEISS Rapid: about 1.4x to 2x faster pictures at the same VRAM, by starting at half size (SPEED). HEISS RTX: NVIDIA RTX video upscaling and smoothing for videos of any length. HEISS Inpaint Stitch: inpainted crops lined up and colour matched before they go back in."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["comfyui", "custom-nodes", "heiss", "speed", "sampling", "spectral", "progressive", "faster", "rtx", "upscale", "video", "frame-generation"]
+keywords = ["comfyui", "custom-nodes", "heiss", "speed", "sampling", "spectral", "progressive", "faster", "rtx", "upscale", "video", "frame-generation", "inpaint", "inpainting"]
 
 [project.urls]
 Repository = "https://github.com/tristmeister/ComfyUI-HEISS-UI-Nodes"
