@@ -189,8 +189,8 @@ class GaussianOracle(Quiet):
         """Negative control: without the paper's rescale the picture comes out far too weak, and the check sees it."""
         good = rapid.grow
 
-        def no_rescale(y, H_, W_, t, seed, kind="flow", noise_scale=1.0):
-            X, _ = good(y, H_, W_, t, seed, kind, noise_scale)
+        def no_rescale(y, H_, W_, t, seed, kind="flow", noise_scale=1.0, noise=None):
+            X, _ = good(y, H_, W_, t, seed, kind, noise_scale, noise=noise)
             r = math.sqrt((H_ * W_) / float(y.shape[-2] * y.shape[-1]))
             k = r if kind == "sigma" else r / (1.0 + (r - 1.0) * t)
             return X / k, t
@@ -238,6 +238,18 @@ class Plan(unittest.TestCase):
 
 
 class Spectrum(unittest.TestCase):
+    def test_grow_hands_back_the_runs_own_noise(self):
+        """The high frequencies the small run never held come back at the grow as the seed's own draw, not new noise."""
+        g = torch.Generator().manual_seed(5)
+        eps = torch.randn(1, 4, 40, 24, generator=g)
+        noise = rapid.high_noise(eps * 0.98, None, 20, 12)
+        want = rapid.spectrum(eps)
+        want[..., :20, :12] = 0.0
+        self.assertLess(float((noise - want / want[..., 20:, :].std()).abs().max()), 0.1)
+        X, _ = rapid.grow(rapid.shrink(eps, 20, 12), 40, 24, 1.0, seed=0, noise=noise)
+        high = rapid.spectrum(X)[..., 20:, 12:].flatten()
+        self.assertGreater(float(torch.corrcoef(torch.stack([high, want[..., 20:, 12:].flatten()]))[0, 1]), 0.99)
+
     def test_white_noise_stays_white(self):
         x = torch.randn(64, 4, 64, 64)
         small = rapid.shrink(x, 32, 32)
